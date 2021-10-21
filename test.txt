@@ -1,0 +1,43 @@
+void bubble(int a[],int s)
+{
+ int i,j;
+ int temp;
+ for(i=1;i<s;i++)
+  {
+    for(j=0;j<s-i;j++)
+     {
+      if(a[j]>a[j+1])
+       {
+        temp=a[j];
+        a[j]=a[j+1];
+        a[j+1]=temp;
+       }
+     }
+   }
+}
+
+
+
+void main(){
+    int size = 8;
+    int i;
+    int arr[8];
+    arr[0] = 5;
+    arr[1] = 8;
+    arr[2] = 2;
+    arr[3] = 3;
+    arr[4] = 66; 
+    arr[5] = 4;
+    arr[6] = 23;
+    arr[7] = 0;
+    
+    printf("\nBefore sorting\n");
+    for(i=0;i<size;i++)
+    printf("%d   ",arr[i]);
+   
+    bubble(arr,size);
+   
+    printf("\nAfter sorting\n");
+    for(i=0;i<size;i++)
+    printf("%d   ",arr[i]);
+}
