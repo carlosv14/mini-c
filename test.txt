@@ -1,19 +1,9 @@
 void bubble(int a[],int s)
 {
- int i,j;
- int temp;
- for(i=1;i<s;i++)
-  {
-    for(j=0;j<s-i;j++)
-     {
-      if(a[j]>a[j+1])
-       {
-        temp=a[j];
-        a[j]=a[j+1];
-        a[j+1]=temp;
-       }
-     }
-   }
+      temp=a[j];
+      a[j]=a[j+1];
+      a[j+1]=temp;
+     
 }
 
 
