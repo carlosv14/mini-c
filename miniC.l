@@ -26,10 +26,10 @@ DIGIT [0-9]
 "break" { return TK_BREAK; }
 "continue" { return TK_CONTINUE; }
 "printf" { return TK_PRINTF; }
-\".*\" { return TK_LIT_STRING; }
-{DIGIT}+ { yylval = atoi(yytext); return TK_LIT_INT; }
-{DIGIT}+"."{DIGIT}+ { return TK_LIT_FLOAT; }
-[a-zA-Z]({DIGIT}|[a-zA-Z_0-9]|_)* {return TK_ID; }
+\".*\" { yylval.string_t = yytext; return TK_LIT_STRING; }
+{DIGIT}+ { yylval.int_t = atoi(yytext); return TK_LIT_INT; }
+{DIGIT}+"."{DIGIT}+ { yylval.float_t = atof(yytext); return TK_LIT_FLOAT; }
+[a-zA-Z]({DIGIT}|[a-zA-Z_0-9]|_)* { yylval.string_t = yytext; return TK_ID; }
 "!" {return '!'; }
 ";" {return ';'; }
 "," {return ','; }
