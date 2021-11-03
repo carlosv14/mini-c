@@ -1,7 +1,10 @@
+%code requires{
+    #include "ast.h"
+}
+
 %{
 //http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
     #include <cstdio>
-    #include "ast.h"
     using namespace std;
     int yylex();
     extern int yylineno;
@@ -45,7 +48,7 @@
 
 %type<expr_t> assignment_expression logical_or_expression
 %type<statement_list_t> statement_list
-%type<statement_t> external_declaration method_definition block_statement
+%type<statement_t> external_declaration method_definition block_statement statement
 %type<declaration_t> declaration
 %type<declaration_list_t> declaration_list
 %type<initializer_t> initializer
@@ -56,6 +59,7 @@
 %type<parameter_t> parameter_declaration
 %type<parameter_list_t> parameters_type_list
 %type<int_t> type;
+%type<expr_t> constant
 %%
 
 input: input external_declaration
@@ -66,10 +70,23 @@ external_declaration: method_definition
             | declaration {$$ = new GlobalDeclaration($1);}
             ;
 
-method_definition: type TK_ID '(' parameters_type_list ')' block_statement
-                 | type TK_ID '(' ')' block_statement
-                 | type TK_ID '(' parameters_type_list ')' ';'
-                 | type TK_ID '(' ')' block_statement ';'
+method_definition: type TK_ID '(' parameters_type_list ')' block_statement {
+                    $$ = new MethodDefinition($1, $2, *$4, $6, yylineno );
+                    delete $4;
+                 }
+                 | type TK_ID '(' ')' block_statement{
+                     ParameterList * pm = new ParameterList;
+                     $$ = new MethodDefinition($1, $2, *pm, $5, yylineno );
+                     delete pm;
+                 }
+                 | type TK_ID '(' parameters_type_list ')' ';'{
+                     $$ = new MethodDefinition($1, $2, *$4, NULL, yylineno);
+                 }
+                 | type TK_ID '(' ')' block_statement ';'{
+                     ParameterList * pm = new ParameterList;
+                     $$ = new MethodDefinition($1, $2, *pm , NULL, yylineno);
+                     delete pm;
+                 }
                 ;
 
 declaration_list: declaration_list declaration { $$ = $1; $$->push_back($2); }
@@ -92,9 +109,6 @@ declarator: TK_ID {$$ = new Declarator($1, NULL, false, yylineno);}
           | TK_ID '[' ']' {$$ = new Declarator($1, NULL, true, yylineno);}
           ;
 
-identifier_list: TK_ID
-               | identifier_list ',' TK_ID
-
 parameters_type_list: parameters_type_list ',' parameter_declaration {$$ = $1; $$->push_back($3);}
                    | parameter_declaration { $$ = new ParameterList; $$->push_back($1); }
                    ;
@@ -105,7 +119,7 @@ parameter_declaration: type declarator { $$ = new Parameter($1, $2, false, yylin
                     ;
 
 initializer: assignment_expression {
-    InitializerElementList * list = InitializerElementList;
+    InitializerElementList * list = new InitializerElementList;
     list->push_back($1);
     $$ = new Initializer(*list, yylineno);
 }
@@ -116,16 +130,6 @@ initializer_list: initializer_list ',' logical_or_expression { $$ = $1; $$->push
                 | logical_or_expression {$$ = new InitializerElementList; $$->push_back($1);}
                 ;
 
-designation: designator_list '='
-           ;
-
-designator_list: designator
-               | designator_list designator
-               ;
-
-designator: '[' constant_expression ']'
-          ;
-
 statement: while_statement
         | expression_statement
         | if_statement
@@ -135,8 +139,8 @@ statement: while_statement
         | TK_PRINTF expression ';'
         ;
 
-statement_list: statement_list statement
-              | statement
+statement_list: statement_list statement { $$ = $1; $$->push_back($2); }
+              | statement { $$ = new StatementList; $$->push_back($1); }
               ;
 
 if_statement: TK_IF '(' expression ')' statement
@@ -159,11 +163,15 @@ jump_statement: TK_RETURN ';'
               | TK_RETURN expression ';'
               ;
 
-block_statement: '{' statement_list '}' { $$ = new BlockStatement($2, NULL, yylineno); }
-               | '{' declaration_list  statement_list'}'  {$$ = new BlockStatement($3, $2, yylineno); delete $2; delete $3; }
+block_statement: '{' statement_list '}' { 
+                    DeclarationList * list = new DeclarationList();
+                    $$ = new BlockStatement(*$2, *list, yylineno);
+                    delete list;
+               }
+               | '{' declaration_list  statement_list'}'  {$$ = new BlockStatement(*$3, *$2, yylineno); delete $2; delete $3; }
                | '{' '}' {
                    StatementList * stmts = new StatementList();
-                   DeclarationList * decls = new DEclarationList();
+                   DeclarationList * decls = new DeclarationList();
                    $$ = new BlockStatement(*stmts, *decls, yylineno);
                    delete stmts;
                    delete decls;
@@ -171,13 +179,9 @@ block_statement: '{' statement_list '}' { $$ = new BlockStatement($2, NULL, yyli
                }
                ;
 
-
-constant_expression: logical_or_expression
-                   ;
-
-type: TK_VOID {$$ = $1;}
-    | TK_INT_TYPE{$$ = $1;}
-    | TK_FLOAT_TYPE{$$ = $1;}
+type: TK_VOID {$$ = VOID;}
+    | TK_INT_TYPE{$$ = INT;}
+    | TK_FLOAT_TYPE{$$ = FLOAT;}
     ;
 
 primary_expression: '(' expression ')'
@@ -248,10 +252,9 @@ assignment_operator: '='
                    ;
 
 expression: assignment_expression
-          | expression ',' assignment_expression
           ;
 
-constant: TK_LIT_INT
-        | TK_LIT_FLOAT
+constant: TK_LIT_INT { $$ = new IntExpr($1 , yylineno);}
+        | TK_LIT_FLOAT { $$ = new FloatExpr($1 , yylineno);}
         ;
 %%

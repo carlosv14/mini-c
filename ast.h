@@ -1,5 +1,6 @@
 #include <string>
 #include <list>
+#include <map>
 
 using namespace std;
 
@@ -7,7 +8,7 @@ class Expr;
 class InitDeclarator;
 class Declaration;
 class Parameter;
-class StatementList;
+class Statement;
 typedef list<Expr *> InitializerElementList;
 typedef list<InitDeclarator *> InitDeclaratorList;
 typedef list<Declaration *> DeclarationList;
@@ -97,6 +98,7 @@ class Declaration{
         int type;
         InitDeclaratorList declarations;
         int line;
+        int evaluateSemantic();
 };
 
 class Parameter{
@@ -122,6 +124,10 @@ class BlockStatement : public Statement{
         StatementList statements;
         DeclarationList declarations;
         int line;
+        int evaluateSemantic();
+        StatementKind getKind(){
+            return BLOCK_STATEMENT;
+        }
 };
 
 class GlobalDeclaration : public Statement {
@@ -130,4 +136,84 @@ class GlobalDeclaration : public Statement {
             this->declaration = declaration;
         }
         Declaration * declaration;
+        int evaluateSemantic();
+        StatementKind getKind(){
+            return GLOBAL_DECLARATION_STATEMENT;
+        }
 };
+
+class MethodDefinition : public Statement{
+    public:
+        MethodDefinition(int type, string id, ParameterList params, Statement * statement, int line){
+            this->type = type;
+            this->id = id;
+            this->params = params;
+            this->statement = statement;
+            this->line = line;
+        }
+
+        int type;
+        string id;
+        ParameterList params;
+        Statement * statement;
+        int line;
+        int evaluateSemantic();
+        StatementKind getKind(){
+            return FUNCTION_DEFINITION_STATEMENT;
+        }
+};
+
+class IntExpr : public Expr{
+    public:
+        IntExpr(int value, int line){
+            this->value = value;
+            this->line = line;
+        }
+        int value;
+        Type getType();
+};
+
+class FloatExpr : public Expr{
+    public:
+        FloatExpr(float value, int line){
+            this->value = value;
+            this->line = line;
+        }
+        float value;
+        Type getType();
+};
+
+class BinaryExpr : public Expr{
+    public:
+        BinaryExpr(Expr * expr1, Expr *expr2, int line){
+            this->expr1 = expr1;
+            this->expr2 = expr2;
+            this->line = line;
+        }
+        Expr * expr1;
+        Expr *expr2;
+        int line;
+};
+
+#define IMPLEMENT_BINARY_EXPR(name) \
+class name##Expr : public BinaryExpr{\
+    public: \
+        name##Expr(Expr * expr1, Expr *expr2, int line) : BinaryExpr(expr1, expr2, line){}\
+        Type getType(); \
+};
+
+IMPLEMENT_BINARY_EXPR(Add);
+IMPLEMENT_BINARY_EXPR(Sub);
+IMPLEMENT_BINARY_EXPR(Mul);
+IMPLEMENT_BINARY_EXPR(Div);
+IMPLEMENT_BINARY_EXPR(Eq);
+IMPLEMENT_BINARY_EXPR(Neq);
+IMPLEMENT_BINARY_EXPR(Gte);
+IMPLEMENT_BINARY_EXPR(Lte);
+IMPLEMENT_BINARY_EXPR(Gt);
+IMPLEMENT_BINARY_EXPR(Lt);
+IMPLEMENT_BINARY_EXPR(LogicalAnd);
+IMPLEMENT_BINARY_EXPR(LogicalOr);
+IMPLEMENT_BINARY_EXPR(Assign);
+IMPLEMENT_BINARY_EXPR(PlusAssign);
+IMPLEMENT_BINARY_EXPR(MinusAssign);
