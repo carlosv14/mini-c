@@ -14,6 +14,7 @@ typedef list<InitDeclarator *> InitDeclaratorList;
 typedef list<Declaration *> DeclarationList;
 typedef list<Parameter *> ParameterList;
 typedef list<Statement *> StatementList;
+typedef list<Expr *> ArgumentList;
 
 enum StatementKind{
     WHILE_STATEMENT,
@@ -30,6 +31,7 @@ enum StatementKind{
 };
 
 enum Type{
+    INVALID,
     STRING,
     INT,
     FLOAT,
@@ -37,6 +39,12 @@ enum Type{
     INT_ARRAY,
     FLOAT_ARRAY,
     BOOL
+};
+
+enum UnaryType{
+    INCREMENT,
+    DECREMENT,
+    NOT
 };
 
 class Statement{
@@ -200,6 +208,90 @@ class name##Expr : public BinaryExpr{\
     public: \
         name##Expr(Expr * expr1, Expr *expr2, int line) : BinaryExpr(expr1, expr2, line){}\
         Type getType(); \
+};
+
+class UnaryExpr : public Expr{
+    public:
+        UnaryExpr(int type, Expr* expr, int line){
+            this->type = type;
+            this->expr = expr;
+            this->line = line;
+        }
+        int type;
+        Expr* expr;
+        int line;
+        Type getType();
+};
+
+class PostIncrementExpr: public Expr{
+    public:
+        PostIncrementExpr(Expr * expr, int line){
+            this->expr = expr;
+            this->line = line;
+        }
+        Expr * expr;
+        int line;
+        Type getType();
+};
+
+class PostDecrementExpr: public Expr{
+    public:
+        PostDecrementExpr(Expr * expr, int line){
+            this->expr = expr;
+            this->line = line;
+        }
+        Expr * expr;
+        int line;
+        Type getType();
+};
+
+class IdExpr : public Expr{
+    public:
+        IdExpr(string id, int line){
+            this->id = id;
+            this->line = line;
+        }
+        string id;
+        int line;
+        Type getType();
+};
+
+class ArrayExpr : public Expr{
+    public:
+        ArrayExpr(IdExpr * id, Expr * expr, int line){
+            this->id = id;
+            this->expr = expr;
+            this->line = line;
+        }
+        IdExpr * id;
+        Expr * expr;
+        int line;
+        Type getType();
+};
+
+class MethodInvocationExpr : public Expr{
+    public:
+        MethodInvocationExpr(IdExpr * id, ArgumentList args, int line){
+            this->id = id;
+            this->args = args;
+            this->line = line;
+        }
+        IdExpr * id;
+        ArgumentList args;
+        int line;
+        Type getType();
+
+};
+
+class StringExpr : public Expr{
+    public:
+        StringExpr(string value, int line){
+            this->value = value;
+            this->line = line;
+        }
+        string value;
+        int line;
+        Type getType();
 };
 
 IMPLEMENT_BINARY_EXPR(Add);

@@ -14,6 +14,9 @@
 
     #define YYERROR_VERBOSE 1
     #define YYDEBUG 1
+    #define EQUAL 1
+    #define PLUSEQUAL 2
+    #define MINUSEQUAL 3
 %}
 
 %union{
@@ -21,7 +24,7 @@
     int int_t;
     float float_t;
     Expr * expr_t;
-    // ArgumentList * argument_list_t;
+    ArgumentList * argument_list_t;
     Statement * statement_t;
     StatementList * statement_list_t;
     InitDeclaratorList * init_declarator_list_t;
@@ -42,7 +45,7 @@
 %token TK_FOR TK_WHILE TK_BREAK TK_CONTINUE TK_RETURN
 %token TK_VOID TK_INT_TYPE TK_FLOAT_TYPE
 %token TK_PRINTF
-%token TK_PLUS_EQUAL TK_MINUS_EQUAL TK_PLUS_PLUS TK_MINUS_MINUS
+%token TK_PLUS_EQUAL TK_MINUS_EQUAL TK_PLUS_PLUS TK_MINUS_MINUS TK_NOT
 %token TK_OR TK_AND
 %token TK_EQUAL TK_NOT_EQUAL TK_GREATER_OR_EQUAL TK_LESS_OR_EQUAL
 
@@ -58,8 +61,10 @@
 %type<init_declarator_list_t> init_declarator_list
 %type<parameter_t> parameter_declaration
 %type<parameter_list_t> parameters_type_list
-%type<int_t> type;
-%type<expr_t> constant
+%type<int_t> type assignment_operator
+%type<expr_t> constant expression logical_and_expression additive_expression multiplicative_expression equality_expression relational_expression
+%type<expr_t> unary_expression postfix_expression primary_expression
+%type<argument_list_t> argument_expression_list
 %%
 
 input: input external_declaration
@@ -130,12 +135,12 @@ initializer_list: initializer_list ',' logical_or_expression { $$ = $1; $$->push
                 | logical_or_expression {$$ = new InitializerElementList; $$->push_back($1);}
                 ;
 
-statement: while_statement
-        | expression_statement
-        | if_statement
-        | for_statement
-        | block_statement
-        | jump_statement
+statement: while_statement {$$ = $1;}
+        | expression_statement {$$ = $1;}
+        | if_statement {$$ = $1;}
+        | for_statement {$$ = $1;}
+        | block_statement {$$ = $1;}
+        | jump_statement {$$ = $1;}
         | TK_PRINTF expression ';'
         ;
 
@@ -184,74 +189,71 @@ type: TK_VOID {$$ = VOID;}
     | TK_FLOAT_TYPE{$$ = FLOAT;}
     ;
 
-primary_expression: '(' expression ')'
-    | TK_ID
-    | constant
-    | TK_LIT_STRING
+primary_expression: '(' expression ')' {$$ = $2;}
+    | TK_ID {$$ = new IdExpr($1, yylineno);}
+    | constant {$$ = $1;}
+    | TK_LIT_STRING { $$ = new StringExpr($1, yylineno); }
     ;
 
 assignment_expression: unary_expression assignment_operator assignment_expression
                      | logical_or_expression
                      ;
 
-postfix_expression: primary_expression
-                    | postfix_expression '[' expression ']'
-                    | postfix_expression '(' ')'
-                    | postfix_expression '(' argument_expression_list ')'
-                    | postfix_expression TK_PLUS_PLUS
-                    | postfix_expression TK_MINUS_MINUS
+postfix_expression: primary_expression {$$ = $1;}
+                    | postfix_expression '[' expression ']' { $$ = new ArrayExpr((IdExpr*)$1, $3, yylineno); }
+                    | postfix_expression '(' ')' { $$ = new MethodInvocationExpr((IdExpr*)$1, *(new ArgumentList), yylineno); }
+                    | postfix_expression '(' argument_expression_list ')' { $$ = new MethodInvocationExpr((IdExpr*)$1, *$3, yylineno); }
+                    | postfix_expression TK_PLUS_PLUS { $$ = new PostIncrementExpr((IdExpr*)$1, yylineno); }
+                    | postfix_expression TK_MINUS_MINUS { $$ = new PostDecrementExpr((IdExpr*)$1, yylineno); }
                     ;
 
 
-argument_expression_list: argument_expression_list ',' assignment_expression
-                        | assignment_expression
+argument_expression_list: argument_expression_list ',' assignment_expression {$$ = $1;  $$->push_back($3);}
+                        | assignment_expression { $$ = new ArgumentList; $$->push_back($1);}
                         ;
 
-unary_expression: TK_PLUS_PLUS unary_expression
-                | TK_MINUS_MINUS unary_expression
-                | '!' cast_expression 
-                | postfix_expression
+unary_expression: TK_PLUS_PLUS unary_expression {$$ = new UnaryExpr(INCREMENT, $2, yylineno);}
+                | TK_MINUS_MINUS unary_expression {$$ = new UnaryExpr(DECREMENT, $2, yylineno);}
+                | TK_NOT unary_expression  {$$ = new UnaryExpr(NOT, $2, yylineno);}
+                | postfix_expression { $$ = $1;}
                 ;
 
-cast_expression: unary_expression
-               ;
-
-multiplicative_expression: multiplicative_expression '*' cast_expression
-      | multiplicative_expression '/' cast_expression
-      | cast_expression
+multiplicative_expression: multiplicative_expression '*' unary_expression { $$ = new MulExpr($1, $3, yylineno); }
+      | multiplicative_expression '/' unary_expression { $$ = new DivExpr($1, $3, yylineno); }
+      | unary_expression {$$ = $1;}
       ;
 
-additive_expression:  additive_expression '+' multiplicative_expression
-                    | additive_expression '-' multiplicative_expression
-                    | multiplicative_expression
+additive_expression:  additive_expression '+' multiplicative_expression{ $$ = new AddExpr($1, $3, yylineno); }
+                    | additive_expression '-' multiplicative_expression { $$ = new SubExpr($1, $3, yylineno); }
+                    | multiplicative_expression {$$ = $1;}
                     ;
 
-relational_expression: relational_expression '>' additive_expression
-                     | relational_expression '<' additive_expression
-                     | relational_expression TK_GREATER_OR_EQUAL additive_expression
-                     | relational_expression TK_LESS_OR_EQUAL additive_expression
-                     | additive_expression
+relational_expression: relational_expression '>' additive_expression { $$ = new GtExpr($1, $3, yylineno); }
+                     | relational_expression '<' additive_expression { $$ = new LtExpr($1, $3, yylineno); }
+                     | relational_expression TK_GREATER_OR_EQUAL additive_expression { $$ = new GteExpr($1, $3, yylineno); }
+                     | relational_expression TK_LESS_OR_EQUAL additive_expression { $$ = new LteExpr($1, $3, yylineno); }
+                     | additive_expression {$$ = $1;}
                      ;
 
-equality_expression:  equality_expression TK_EQUAL relational_expression
-                   | equality_expression TK_NOT_EQUAL relational_expression
-                   | relational_expression
+equality_expression:  equality_expression TK_EQUAL relational_expression { $$ = new EqExpr($1, $3, yylineno); }
+                   | equality_expression TK_NOT_EQUAL relational_expression { $$ = new NeqExpr($1, $3, yylineno); }
+                   | relational_expression {$$ = $1;}
                    ;
 
-logical_or_expression: logical_or_expression TK_OR logical_and_expression
-                    | logical_and_expression
+logical_or_expression: logical_or_expression TK_OR logical_and_expression { $$ = new LogicalOrExpr($1, $3, yylineno); }
+                    | logical_and_expression {$$ = $1;}
                     ;
 
-logical_and_expression: logical_and_expression TK_AND equality_expression
-                      | equality_expression
+logical_and_expression: logical_and_expression TK_AND equality_expression { $$ = new LogicalAndExpr($1, $3, yylineno); }
+                      | equality_expression {$$ = $1;}
                       ;
 
-assignment_operator: '='
-                   | TK_PLUS_EQUAL
-                   | TK_MINUS_EQUAL
+assignment_operator: '=' { $$ = EQUAL; }
+                   | TK_PLUS_EQUAL {$$ = PLUSEQUAL; }
+                   | TK_MINUS_EQUAL { $$ = MINUSEQUAL; }
                    ;
 
-expression: assignment_expression
+expression: assignment_expression {$$ = $1;}
           ;
 
 constant: TK_LIT_INT { $$ = new IntExpr($1 , yylineno);}

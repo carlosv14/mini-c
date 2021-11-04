@@ -16,6 +16,32 @@ class FunctionInfo{
 map<string, Type> globalVariables = {};
 map<string, Type> variables;
 map<string, FunctionInfo*> methods;
+map<string, Type> resultTypes ={
+    {"INT,INT", INT},
+    {"FLOAT,FLOAT", FLOAT},
+    {"INT,FLOAT", FLOAT},
+    {"FLOAT,INT", FLOAT},
+};
+
+string getTypeName(Type type){
+    switch(type){
+        case INT:
+            return "INT";
+        case FLOAT:
+            return "FLOAT";
+        case VOID:
+            return "VOID";
+        case INT_ARRAY:
+            return "INT_ARRAY";
+        case FLOAT_ARRAY:
+            return "FLOAT_ARRAY";
+        case BOOL:
+            return "BOOL";
+    }
+
+    cout<<"Unknown type"<<endl;
+    exit(0);
+}
 
 ContextStack * context = NULL;
 
@@ -105,3 +131,90 @@ Type FloatExpr::getType(){
 
 #define IMPLEMENT_BINARY_GET_TYPE(name)\
 Type name##Expr::getType(){\
+    string leftType = getTypeName(this->expr1->getType());\
+    string rightType = getTypeName(this->expr2->getType());\
+    Type resultType = resultTypes[leftType+","+rightType];\
+    if(resultType == 0){\
+        cerr<< "Error: type "<< leftType <<" can't be converted to type "<< rightType <<" line: "<<this->line<<endl;\
+        exit(0);\
+    }\
+    return resultType; \
+}\
+
+#define IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(name)\
+Type name##Expr::getType(){\
+    string leftType = getTypeName(this->expr1->getType());\
+    string rightType = getTypeName(this->expr2->getType());\
+    Type resultType = resultTypes[leftType+","+rightType];\
+    if(resultType == 0){\
+        cerr<< "Error: type "<< leftType <<" can't be converted to type "<< rightType <<" line: "<<this->line<<endl;\
+        exit(0);\
+    }\
+    return BOOL; \
+}\
+
+
+Type getUnaryType(Type expressionType, int unaryOperation){
+    switch(unaryOperation){
+        case INCREMENT:
+        case DECREMENT:
+            if(expressionType == INT || expressionType == FLOAT)
+                return expressionType;
+        case NOT:
+            if(expressionType == BOOL)
+                return BOOL;
+    }
+
+    cerr<<"Error: Invalid type"<<endl;
+    exit(0);
+}
+
+Type UnaryExpr::getType(){
+    Type exprType = this->expr->getType();
+    return getUnaryType(exprType, this->type);
+}
+
+Type ArrayExpr::getType(){
+    return this->id->getType();
+}
+
+Type IdExpr::getType(){
+    //TODO
+    return INVALID;
+}
+
+Type MethodInvocationExpr::getType(){
+    //TODO
+    return INVALID;
+}
+
+Type PostIncrementExpr::getType(){
+    return this->expr->getType();
+}
+
+Type PostDecrementExpr::getType(){
+    //TODO
+    return INVALID;
+}
+
+Type StringExpr::getType(){
+    //TODO
+    return INVALID;
+}
+
+IMPLEMENT_BINARY_GET_TYPE(Add);
+IMPLEMENT_BINARY_GET_TYPE(Sub);
+IMPLEMENT_BINARY_GET_TYPE(Mul);
+IMPLEMENT_BINARY_GET_TYPE(Div);
+IMPLEMENT_BINARY_GET_TYPE(Assign);
+IMPLEMENT_BINARY_GET_TYPE(PlusAssign);
+IMPLEMENT_BINARY_GET_TYPE(MinusAssign);
+
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Eq);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Neq);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Gte);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Lte);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Gt);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Lt);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(LogicalAnd);
+IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(LogicalOr);
