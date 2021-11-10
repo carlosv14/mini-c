@@ -9,7 +9,7 @@ class ContextStack{
 
 class FunctionInfo{
     public:
-        int returnType;
+        Type returnType;
         list<Parameter *> parameters;
 };
 
@@ -32,9 +32,9 @@ string getTypeName(Type type){
         case VOID:
             return "VOID";
         case INT_ARRAY:
-            return "INT_ARRAY";
+            return "INT";
         case FLOAT_ARRAY:
-            return "FLOAT_ARRAY";
+            return "FLOAT";
         case BOOL:
             return "BOOL";
     }
@@ -59,6 +59,37 @@ void popContext(){
         free(context);
         context = previous;
     }
+}
+
+Type getLocalVariableType(string id){
+    ContextStack * currContext = context;
+    while(currContext != NULL){
+        if(currContext->variables[id] != 0)
+            return currContext->variables[id];
+        currContext = currContext->prev;
+    }
+    if(!context->variables.empty())
+        return context->variables[id];
+    return INVALID;
+}
+
+
+Type getVariableType(string id){
+    if(!globalVariables.empty())
+        return globalVariables[id];
+    return INVALID;
+}
+
+
+bool variableExists(string id){
+  Type value;
+  if(context != NULL){
+    value = getLocalVariableType(id);
+    //context->variables[id] != 0
+    if(value != 0)
+      return true;
+  }
+  return false;
 }
 
 int BlockStatement::evaluateSemantic(){
@@ -87,15 +118,48 @@ int BlockStatement::evaluateSemantic(){
     return 0;
 }
 
+int Declaration::evaluateSemantic(){
+    list<InitDeclarator * >::iterator it = this->declarations.begin();
+    while(it != this->declarations.end()){
+        InitDeclarator * declaration = (*it);
+        if(declaration->declarator->isArray){
+            if(declaration->declarator->arrayDeclaration == NULL && declaration->initializer == NULL){
+                cout<<"error: storage size of: "<<declaration->declarator->id  <<" is unknown line: "<<this->line<<endl;
+                exit(0);
+            }
+        }
+        if(declaration->initializer != NULL){
+            list<Expr *>::iterator ite = declaration->initializer->expressions.begin();
+            while(ite!= declaration->initializer->expressions.end()){
+                Type exprType = (*ite)->getType();
+                if(exprType != FLOAT && exprType != INT){
+                    cout<<"error: invalid conversion from: "<< getTypeName(exprType) <<" to " <<getTypeName(this->type)<< " line: "<<this->line <<endl;
+                    exit(0);
+                }
+                ite++;
+            }
+        }
+        if(!variableExists(declaration->declarator->id)){
+            context->variables[declaration->declarator->id] = this->type;
+        }else{
+            cout<<"error: redefinition of variable: "<< declaration->declarator->id<< " line: "<<this->line <<endl;
+            exit(0);
+        }
+    it++;
+  }
+  return 0;
+}
+
 int GlobalDeclaration::evaluateSemantic(){
     //TODO: evaluar semántica.
     return 0;
 }
 
 
-void addMethodDeclaration(string id, int line, int type, ParameterList params){
+void addMethodDeclaration(string id, int line, Type type, ParameterList params){
     if(methods[id] != 0){
-        //TODO: imprimir error.
+        cout<<"redefinition of function "<<id<<" in line: "<<line<<endl;
+        exit(0);
     }
     methods[id] = new FunctionInfo();
     methods[id]->returnType = type;
@@ -110,7 +174,12 @@ int MethodDefinition::evaluateSemantic(){
 
     addMethodDeclaration(this->id, this->line, this->type, this->params);
     pushContext();
-    //TODO: evaluar semantica de parámetros
+   
+    list<Parameter* >::iterator it = this->params.begin();
+    while(it != this->params.end()){
+        (*it)->evaluateSemantic();
+        it++;
+    }
 
     if(this->statement !=NULL ){
         this->statement->evaluateSemantic();
@@ -169,6 +238,16 @@ Type getUnaryType(Type expressionType, int unaryOperation){
     exit(0);
 }
 
+int Parameter::evaluateSemantic(){
+    if(!variableExists(this->declarator->id)){
+        context->variables[declarator->id] = this->type;
+    }else{
+        cout<<"error: redefinition of variable: "<< declarator->id<< " line: "<<this->line <<endl;
+        exit(0);
+    }
+    return 0;
+}
+
 Type UnaryExpr::getType(){
     Type exprType = this->expr->getType();
     return getUnaryType(exprType, this->type);
@@ -179,13 +258,50 @@ Type ArrayExpr::getType(){
 }
 
 Type IdExpr::getType(){
-    //TODO
-    return INVALID;
+    Type value;
+    if(context != NULL){
+        value = getLocalVariableType(this->id);
+        if(value != 0)
+            return value;
+    }
+    value = getVariableType(this->id);
+    if(value == 0){
+        cout<<"error: '"<<this->id<<"' was not declared in this scope line: "<<this->line<<endl;
+        exit(0);
+    }
+    return value;
 }
 
 Type MethodInvocationExpr::getType(){
-    //TODO
-    return INVALID;
+    FunctionInfo * func = methods[this->id->id];
+    if(func == NULL){
+        cout<<"error: function "<<this->id->id<<" not found, line: "<<this->line<<endl;
+        exit(0);
+    }
+    Type funcType = func->returnType;
+    if(func->parameters.size() > this->args.size()){
+        cout<<"error: to few arguments to function"<<this->id->id<<" line: "<<this->line<<endl;
+        exit(0);
+    }
+    if(func->parameters.size() < this->args.size()){
+        cout<<"error: to many arguments to function "<<this->id->id<<" line: "<<this->line<<endl;
+        exit(0);
+    }
+
+    list<Parameter *>::iterator paramIt = func->parameters.begin();
+    list<Expr *>::iterator argsIt =this->args.begin();
+    while(paramIt != func->parameters.end() && argsIt != this->args.end()){
+        string paramType = getTypeName((*paramIt)->type);
+        string argType = getTypeName((*argsIt)->getType());
+        if( paramType != argType){
+            cout<<"error: invalid conversion from: "<< argType <<" to " <<paramType<< " line: "<<this->line <<endl;
+            exit(0);
+        }
+        paramIt++;
+        argsIt++;
+    }
+
+    return funcType;
 }
 
 Type PostIncrementExpr::getType(){
@@ -193,13 +309,72 @@ Type PostIncrementExpr::getType(){
 }
 
 Type PostDecrementExpr::getType(){
-    //TODO
-    return INVALID;
+    return this->expr->getType();
 }
 
 Type StringExpr::getType(){
-    //TODO
-    return INVALID;
+    return STRING;
+}
+
+int WhileStatement::evaluateSemantic(){
+    if(this->expr->getType() != BOOL){
+        cout<<"Expression for while must be boolean";
+        exit(0);
+    }
+    
+    pushContext();
+    if(this->stmt != NULL){
+        this->stmt->evaluateSemantic();
+    }
+    popContext();
+    return 0;
+}
+
+
+int ElseStatement::evaluateSemantic(){
+    if(this->conditionalExpr->getType() != BOOL){
+        cout<<"Expression for if must be boolean";
+        exit(0);
+    }
+    pushContext();
+    this->trueStatement->evaluateSemantic();
+    popContext();
+    pushContext();
+    if(this->falseStatement != NULL)
+        this->falseStatement->evaluateSemantic();
+    popContext();
+    return 0;
+}
+
+/*
+while(true){
+    if(true){
+        int a = 5;
+    }
+}
+*/
+
+int IfStatement::evaluateSemantic(){
+    if(this->conditionalExpr->getType() != BOOL){
+        cout<<"Expression for if must be boolean";
+        exit(0);
+    }
+    pushContext();
+    this->trueStatement->evaluateSemantic();
+    popContext();
+    return 0;
+}
+
+int ExprStatement::evaluateSemantic(){
+    return this->expr->getType();
+}
+
+int ReturnStatement::evaluateSemantic(){
+    return this->expr->getType();
+}
+
+int PrintStatement::evaluateSemantic(){
+    return this->expr->getType();
 }
 
 IMPLEMENT_BINARY_GET_TYPE(Add);

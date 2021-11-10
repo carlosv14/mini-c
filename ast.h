@@ -27,7 +27,8 @@ enum StatementKind{
     BLOCK_STATEMENT,
     PRINT_STATEMENT,
     FUNCTION_DEFINITION_STATEMENT,
-    GLOBAL_DECLARATION_STATEMENT
+    GLOBAL_DECLARATION_STATEMENT,
+    ELSE_STATEMENT
 };
 
 enum Type{
@@ -98,12 +99,12 @@ class InitDeclarator{
 
 class Declaration{
     public:
-        Declaration(int type, InitDeclaratorList declarations, int line){
+        Declaration(Type type, InitDeclaratorList declarations, int line){
             this->type = type;
             this->declarations = declarations;
             this->line = line;
         }
-        int type;
+        Type type;
         InitDeclaratorList declarations;
         int line;
         int evaluateSemantic();
@@ -111,15 +112,16 @@ class Declaration{
 
 class Parameter{
     public:
-        Parameter(int type, Declarator * declarator, bool isArray, int line){
+        Parameter(Type type, Declarator * declarator, bool isArray, int line){
             this->type = type;
             this->declarator = declarator;
             this->line = line;
         }
-        int type;
+        Type type;
         Declarator* declarator;
         bool isArray;
         int line;
+        int evaluateSemantic();
 };
 
 class BlockStatement : public Statement{
@@ -152,7 +154,7 @@ class GlobalDeclaration : public Statement {
 
 class MethodDefinition : public Statement{
     public:
-        MethodDefinition(int type, string id, ParameterList params, Statement * statement, int line){
+        MethodDefinition(Type type, string id, ParameterList params, Statement * statement, int line){
             this->type = type;
             this->id = id;
             this->params = params;
@@ -160,7 +162,7 @@ class MethodDefinition : public Statement{
             this->line = line;
         }
 
-        int type;
+        Type type;
         string id;
         ParameterList params;
         Statement * statement;
@@ -293,6 +295,85 @@ class StringExpr : public Expr{
         int line;
         Type getType();
 };
+
+class WhileStatement: public Statement{
+    public:
+        WhileStatement(Expr * expr, Statement * stmt, int line){
+            this->expr = expr;
+            this->stmt = stmt;
+            this->line = line;
+        }
+        Expr* expr;
+        Statement * stmt;
+        int line;
+        int evaluateSemantic();
+        StatementKind getKind(){
+            return WHILE_STATEMENT;
+        }
+};
+
+class ElseStatement : public Statement{
+    public:
+        ElseStatement(Expr * conditionalExpr, Statement * trueStatement, Statement * falseStatement, int line){
+            this->conditionalExpr = conditionalExpr;
+            this->trueStatement = trueStatement;
+            this->line = line;
+            this->falseStatement = falseStatement;
+        }
+        Expr * conditionalExpr;
+        Statement * trueStatement;
+        Statement * falseStatement;
+        int evaluateSemantic();
+        StatementKind getKind(){return ELSE_STATEMENT;}
+};
+
+class IfStatement : public Statement{
+    public:
+        IfStatement(Expr * conditionalExpr, Statement * trueStatement, int line){
+            this->conditionalExpr = conditionalExpr;
+            this->trueStatement = trueStatement;
+            this->line = line;
+        }
+        Expr * conditionalExpr;
+        Statement * trueStatement;
+        int evaluateSemantic();
+        StatementKind getKind(){return IF_STATEMENT;}
+};
+
+
+class ExprStatement : public Statement{
+    public:
+        ExprStatement(Expr * expr, int line){
+            this->expr = expr;
+            this->line = line;
+        }
+        Expr * expr;
+        int evaluateSemantic();
+        StatementKind getKind(){return EXPRESSION_STATEMENT;}
+};
+
+class ReturnStatement : public Statement{
+    public:
+        ReturnStatement(Expr * expr, int line){
+            this->expr = expr;
+            this->line = line;
+        }
+        Expr * expr;
+        int evaluateSemantic();
+        StatementKind getKind(){return RETURN_STATEMENT;}
+};
+
+class PrintStatement : public Statement{
+    public:
+        PrintStatement(Expr * expr, int line){
+            this->expr = expr;
+            this->line = line;
+        }
+        Expr * expr;
+        int evaluateSemantic();
+        StatementKind getKind(){return PRINT_STATEMENT;}
+};
+
 
 IMPLEMENT_BINARY_EXPR(Add);
 IMPLEMENT_BINARY_EXPR(Sub);

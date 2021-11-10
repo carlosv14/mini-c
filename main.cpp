@@ -8,7 +8,6 @@ extern char* yytext;
 int yyparse();
 
 int main(int argc, char* argv[]){
-    ++--argv[1];
     if(argc != 2){
         fprintf(stderr, "Hace falta el archivo de entrada %s\n", argv[0]);
         return 1;
