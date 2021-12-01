@@ -197,7 +197,7 @@ primary_expression: '(' expression ')' {$$ = $2;}
     ;
 
 assignment_expression: unary_expression assignment_operator assignment_expression
-                     | logical_or_expression
+                     | logical_or_expression { $$ = $1; }
                      ;
 
 postfix_expression: primary_expression {$$ = $1;}

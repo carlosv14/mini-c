@@ -1,6 +1,7 @@
 #include <string>
 #include <list>
 #include <map>
+#include "code.h"
 
 using namespace std;
 
@@ -53,12 +54,14 @@ class Statement{
         int line;
         virtual int evaluateSemantic() = 0;
         virtual StatementKind getKind() = 0;
+        virtual string genCode() = 0;
 };
 
 class Expr{
     public:
         int line;
         virtual Type getType() = 0;
+        virtual void genCode(Code &code) = 0;
 };
 
 class Initializer{
@@ -135,6 +138,7 @@ class BlockStatement : public Statement{
         DeclarationList declarations;
         int line;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){
             return BLOCK_STATEMENT;
         }
@@ -147,6 +151,7 @@ class GlobalDeclaration : public Statement {
         }
         Declaration * declaration;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){
             return GLOBAL_DECLARATION_STATEMENT;
         }
@@ -168,6 +173,7 @@ class MethodDefinition : public Statement{
         Statement * statement;
         int line;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){
             return FUNCTION_DEFINITION_STATEMENT;
         }
@@ -181,6 +187,7 @@ class IntExpr : public Expr{
         }
         int value;
         Type getType();
+        void genCode(Code &code);
 };
 
 class FloatExpr : public Expr{
@@ -191,6 +198,7 @@ class FloatExpr : public Expr{
         }
         float value;
         Type getType();
+        void genCode(Code &code);
 };
 
 class BinaryExpr : public Expr{
@@ -210,6 +218,7 @@ class name##Expr : public BinaryExpr{\
     public: \
         name##Expr(Expr * expr1, Expr *expr2, int line) : BinaryExpr(expr1, expr2, line){}\
         Type getType(); \
+        void genCode(Code &code);\
 };
 
 class UnaryExpr : public Expr{
@@ -223,6 +232,7 @@ class UnaryExpr : public Expr{
         Expr* expr;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class PostIncrementExpr: public Expr{
@@ -234,6 +244,7 @@ class PostIncrementExpr: public Expr{
         Expr * expr;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class PostDecrementExpr: public Expr{
@@ -245,6 +256,7 @@ class PostDecrementExpr: public Expr{
         Expr * expr;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class IdExpr : public Expr{
@@ -256,6 +268,7 @@ class IdExpr : public Expr{
         string id;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class ArrayExpr : public Expr{
@@ -269,6 +282,7 @@ class ArrayExpr : public Expr{
         Expr * expr;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class MethodInvocationExpr : public Expr{
@@ -282,6 +296,7 @@ class MethodInvocationExpr : public Expr{
         ArgumentList args;
         int line;
         Type getType();
+        void genCode(Code &code);
 
 };
 
@@ -294,6 +309,7 @@ class StringExpr : public Expr{
         string value;
         int line;
         Type getType();
+        void genCode(Code &code);
 };
 
 class WhileStatement: public Statement{
@@ -306,6 +322,7 @@ class WhileStatement: public Statement{
         Expr* expr;
         Statement * stmt;
         int line;
+        string genCode();
         int evaluateSemantic();
         StatementKind getKind(){
             return WHILE_STATEMENT;
@@ -323,6 +340,7 @@ class ElseStatement : public Statement{
         Expr * conditionalExpr;
         Statement * trueStatement;
         Statement * falseStatement;
+        string genCode();
         int evaluateSemantic();
         StatementKind getKind(){return ELSE_STATEMENT;}
 };
@@ -336,6 +354,7 @@ class IfStatement : public Statement{
         }
         Expr * conditionalExpr;
         Statement * trueStatement;
+        string genCode();
         int evaluateSemantic();
         StatementKind getKind(){return IF_STATEMENT;}
 };
@@ -349,6 +368,7 @@ class ExprStatement : public Statement{
         }
         Expr * expr;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){return EXPRESSION_STATEMENT;}
 };
 
@@ -360,6 +380,7 @@ class ReturnStatement : public Statement{
         }
         Expr * expr;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){return RETURN_STATEMENT;}
 };
 
@@ -371,6 +392,7 @@ class PrintStatement : public Statement{
         }
         Expr * expr;
         int evaluateSemantic();
+        string genCode();
         StatementKind getKind(){return PRINT_STATEMENT;}
 };
 
