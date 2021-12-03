@@ -6,6 +6,22 @@
 
 extern Asm assemblyFile;
 
+int globalStackPointer = 0;
+
+class VariableInfo{
+    public:
+        VariableInfo(int offset, bool isArray, bool isParameter){
+            this->offset = offset;
+            this->isArray = isArray;
+            this->isParameter = isParameter;
+        }
+        int offset;
+        bool isArray;
+        bool isParameter;
+};
+
+map<string, VariableInfo *> codeGenerationVars;
+
 class ContextStack{
     public:
         struct ContextStack* prev;
@@ -201,6 +217,33 @@ int BlockStatement::evaluateSemantic(){
     return 0;
 }
 
+string BlockStatement::genCode(){
+    stringstream ss;
+
+    list<Declaration *>::iterator itd = this->declarations.begin();
+    while (itd != this->declarations.end())
+    {
+        Declaration * dec = *itd;
+        if(dec != NULL){
+            ss<<dec->genCode()<<endl;
+        }
+
+        itd++;
+    }
+
+    list<Statement *>::iterator its = this->statements.begin();
+    while (its != this->statements.end())
+    {
+        Statement * stmt = *its;
+        if(stmt != NULL){
+            ss<<stmt->genCode()<<endl;
+        }
+
+        its++;
+    }
+    return ss.str();
+}
+
 int Declaration::evaluateSemantic(){
     list<InitDeclarator * >::iterator it = this->declarations.begin();
     while(it != this->declarations.end()){
@@ -233,9 +276,67 @@ int Declaration::evaluateSemantic(){
   return 0;
 }
 
+string Declaration::genCode(){
+    stringstream code;
+    list<InitDeclarator *>::iterator it = this->declarations.begin();
+    while(it != this->declarations.end()){
+        InitDeclarator * declaration = (*it);
+        if (!declaration->declarator->isArray)
+        {
+           codeGenerationVars[declaration->declarator->id] = new VariableInfo(globalStackPointer, false, false);
+           globalStackPointer +=4;
+        }
+
+        if(declaration->initializer != NULL){
+            list<Expr *>::iterator itExpr = declaration->initializer->expressions.begin();
+            for (int i = 0; i < declaration->initializer->expressions.size(); i++)
+            {
+                Code exprCode;
+                (*itExpr)->genCode(exprCode);
+                code << exprCode.code <<endl
+                << "sw " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
+                releaseIntTemp(exprCode.place);
+                itExpr++;
+            }
+            
+        }
+       it++; 
+    }
+    return code.str();
+}
+
 int GlobalDeclaration::evaluateSemantic(){
     //TODO: evaluar semántica.
     return 0;
+}
+
+string GlobalDeclaration::genCode(){
+    list<InitDeclarator *>::iterator it = this->declaration->declarations.begin();
+    stringstream data;
+    stringstream code;
+    while (it != this->declaration->declarations.end())
+    {
+        InitDeclarator * declaration = (*it);
+        data << declaration->declarator->id <<": .word 0"<<endl;
+        if(declaration->initializer != NULL){
+            list<Expr *>::iterator itExpr = declaration->initializer->expressions.begin();
+            for(int i = 0; i < declaration->initializer->expressions.size(); i++){
+                Code exprCode;
+                (*itExpr)->genCode(exprCode);
+                code << exprCode.code;
+                if(!declaration->declarator->isArray){
+                    code << "sw "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
+                }
+                releaseIntTemp(exprCode.place);
+                itExpr++;
+            }
+        }
+
+        it++;
+    }
+
+    assemblyFile.data += data.str();
+    return code.str();
 }
 
 
@@ -271,6 +372,10 @@ int MethodDefinition::evaluateSemantic(){
     popContext();
 
     return 0;
+}
+
+string MethodDefinition::genCode(){
+    return this->statement->genCode();
 }
 
 Type IntExpr::getType(){
@@ -309,8 +414,22 @@ Type name##Expr::getType(){\
     return resultType; \
 }\
 
-#define IMPLEMENT_BINARY_GEN_CODE(name, op)\
-Type name##Expr::genCode(Code &code){\
+void toFloat(Code &code, Type type){
+    if(type == INT){
+        string floatTemp = getFloatTemp();
+        stringstream ss;
+        ss << code.code
+        << "mtc1 "<< code.place << ", " << floatTemp <<endl
+        << "cvt.s.w " << floatTemp<< ", " << floatTemp <<endl;
+        releaseFloatTemp(code.place);
+    }
+    else{
+        /* nothing */
+    }
+}
+
+#define IMPLEMENT_BINARY_ARIT_GEN_CODE(name, op)\
+void name##Expr::genCode(Code &code){\
     Code leftCode, rightCode;\
     stringstream ss;\
     this->expr1->genCode(leftCode);\
@@ -322,8 +441,8 @@ Type name##Expr::genCode(Code &code){\
         << rightCode.code <<endl\
         << intArithmetic(leftCode, rightCode, code, op)<< endl;\
     }else{\
-        leftCode.toFloat();\
-        rightCode.toFloat();\
+        toFloat(leftCode, this->expr1->getType());\
+        toFloat(rightCode, this->expr2->getType());\
         releaseIntTemp(leftCode.place);\
         releaseIntTemp(rightCode.place);\
         ss << leftCode.code << endl\
@@ -345,6 +464,54 @@ Type name##Expr::getType(){\
     return BOOL; \
 }\
 
+
+string intArithmetic(Code &leftCode, Code &rightCode, Code &code, char op){
+    stringstream ss;
+    code.place = getIntTemp();
+    switch (op)
+    {
+    case '+':
+        ss << "add "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+     case '-':
+        ss << "sub "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+    case '*':
+        ss << "mult "<< leftCode.place <<", "<< rightCode.place <<endl
+        << "mflo "<< code.place;
+        break;
+    case '/':
+        ss << "div "<< leftCode.place <<", "<< rightCode.place
+        << "mflo "<< code.place;
+        break;
+    default:
+        break;
+    }
+    return ss.str();
+}
+
+string floatArithmetic(Code &leftCode, Code &rightCode, Code &code, char op){
+    stringstream ss;
+    code.place = getFloatTemp();
+    switch (op)
+    {
+    case '+':
+        ss << "add.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+     case '-':
+        ss << "sub.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+    case '*':
+        ss << "mul.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+    case '/':
+        ss << "div.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+        break;
+    default:
+        break;
+    }
+    return ss.str();
+}
 
 Type getUnaryType(Type expressionType, int unaryOperation){
     switch(unaryOperation){
@@ -371,13 +538,22 @@ int Parameter::evaluateSemantic(){
     return 0;
 }
 
+
 Type UnaryExpr::getType(){
     Type exprType = this->expr->getType();
     return getUnaryType(exprType, this->type);
 }
 
+void UnaryExpr::genCode(Code &code){
+    
+}
+
 Type ArrayExpr::getType(){
     return this->id->getType();
+}
+
+void ArrayExpr::genCode(Code &code){
+    
 }
 
 Type IdExpr::getType(){
@@ -393,6 +569,10 @@ Type IdExpr::getType(){
         exit(0);
     }
     return value;
+}
+
+void IdExpr::genCode(Code &code){
+    
 }
 
 Type MethodInvocationExpr::getType(){
@@ -427,12 +607,24 @@ Type MethodInvocationExpr::getType(){
     return funcType;
 }
 
+void MethodInvocationExpr::genCode(Code &code){
+    
+}
+
 Type PostIncrementExpr::getType(){
     return this->expr->getType();
 }
 
+void PostIncrementExpr::genCode(Code &code){
+    
+}
+
 Type PostDecrementExpr::getType(){
     return this->expr->getType();
+}
+
+void PostDecrementExpr::genCode(Code &code){
+
 }
 
 Type StringExpr::getType(){
@@ -566,6 +758,53 @@ int PrintStatement::evaluateSemantic(){
     return this->expr->getType();
 }
 
+string PrintStatement::genCode(){
+    return "";
+}
+
+void EqExpr::genCode(Code &code){
+
+}
+
+void NeqExpr::genCode(Code &code){
+    
+}
+
+void GteExpr::genCode(Code &code){
+    
+}
+
+void LteExpr::genCode(Code &code){
+    
+}
+
+void GtExpr::genCode(Code &code){
+    
+}
+
+void LtExpr::genCode(Code &code){
+    
+}
+
+void LogicalAndExpr::genCode(Code &code){
+    
+}
+
+void LogicalOrExpr::genCode(Code &code){
+    
+}
+
+void AssignExpr::genCode(Code &code){
+    
+}
+void PlusAssignExpr::genCode(Code &code){
+    
+}
+
+void MinusAssignExpr::genCode(Code &code){
+    
+}
+
 IMPLEMENT_BINARY_GET_TYPE(Add);
 IMPLEMENT_BINARY_GET_TYPE(Sub);
 IMPLEMENT_BINARY_GET_TYPE(Mul);
@@ -573,6 +812,11 @@ IMPLEMENT_BINARY_GET_TYPE(Div);
 IMPLEMENT_BINARY_GET_TYPE(Assign);
 IMPLEMENT_BINARY_GET_TYPE(PlusAssign);
 IMPLEMENT_BINARY_GET_TYPE(MinusAssign);
+
+IMPLEMENT_BINARY_ARIT_GEN_CODE(Add, '+');
+IMPLEMENT_BINARY_ARIT_GEN_CODE(Sub, '-');
+IMPLEMENT_BINARY_ARIT_GEN_CODE(Mul, '*');
+IMPLEMENT_BINARY_ARIT_GEN_CODE(Div, '/');
 
 IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Eq);
 IMPLEMENT_BINARY_BOOLEAN_GET_TYPE(Neq);

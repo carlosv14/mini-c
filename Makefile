@@ -2,16 +2,16 @@ TARGET=miniC
 all: ${TARGET}
 
 ${TARGET}: ast.o ${TARGET}_parser.o ${TARGET}_lexer.o main.o
-	g++ -g -o $@ $^
+	g++ -std=c++11 -g -o $@ $^
 	
 ast.o: ast.cpp ast.h
-	g++ -g -c -o $@ $<
+	g++ -std=c++11 -g -c -o $@ $<
 
 main.o:	main.cpp
-	g++ -g -c -o $@ $<
+	g++ -std=c++11 -g -c -o $@ $<
 	
 ${TARGET}_lexer.o: ${TARGET}_lexer.cpp
-	g++ -g -c -o $@ $<
+	g++ -std=c++11 -g -c -o $@ $<
 
 ${TARGET}_lexer.cpp:  ${TARGET}.l
 	flex -o $@ $<
@@ -20,7 +20,7 @@ ${TARGET}_parser.cpp: ${TARGET}.y ast.h
 	bison --defines=tokens.h -o $@ $<
 
 ${TARGET}_parser.o: ${TARGET}_parser.cpp
-	g++ -g -c -o $@ $<
+	g++ -std=c++11 -g -c -o $@ $<
 
 clean:
 	rm -f *.o

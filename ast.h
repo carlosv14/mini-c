@@ -111,6 +111,7 @@ class Declaration{
         InitDeclaratorList declarations;
         int line;
         int evaluateSemantic();
+        string genCode();
 };
 
 class Parameter{
