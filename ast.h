@@ -2,7 +2,6 @@
 #include <list>
 #include <map>
 #include "code.h"
-
 using namespace std;
 
 class Expr;
@@ -30,17 +29,6 @@ enum StatementKind{
     FUNCTION_DEFINITION_STATEMENT,
     GLOBAL_DECLARATION_STATEMENT,
     ELSE_STATEMENT
-};
-
-enum Type{
-    INVALID,
-    STRING,
-    INT,
-    FLOAT,
-    VOID,
-    INT_ARRAY,
-    FLOAT_ARRAY,
-    BOOL
 };
 
 enum UnaryType{

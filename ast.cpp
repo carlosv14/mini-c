@@ -10,14 +10,16 @@ int globalStackPointer = 0;
 
 class VariableInfo{
     public:
-        VariableInfo(int offset, bool isArray, bool isParameter){
+        VariableInfo(int offset, bool isArray, bool isParameter, Type type){
             this->offset = offset;
             this->isArray = isArray;
             this->isParameter = isParameter;
+            this->type = type;
         }
         int offset;
         bool isArray;
         bool isParameter;
+        Type type;
 };
 
 map<string, VariableInfo *> codeGenerationVars;
@@ -112,7 +114,7 @@ void releaseIntTemp(string temp){
 }
 
 void releaseFloatTemp(string temp){
-    intTempMap.erase(temp);
+    floatTempMap.erase(temp);
 }
 
 string getTypeName(Type type){
@@ -283,7 +285,7 @@ string Declaration::genCode(){
         InitDeclarator * declaration = (*it);
         if (!declaration->declarator->isArray)
         {
-           codeGenerationVars[declaration->declarator->id] = new VariableInfo(globalStackPointer, false, false);
+           codeGenerationVars[declaration->declarator->id] = new VariableInfo(globalStackPointer, false, false, this->type);
            globalStackPointer +=4;
         }
 
@@ -293,8 +295,12 @@ string Declaration::genCode(){
             {
                 Code exprCode;
                 (*itExpr)->genCode(exprCode);
-                code << exprCode.code <<endl
-                << "sw " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
+                code << exprCode.code <<endl;
+                if(exprCode.type == INT)
+                    code << "sw " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
+                else if(exprCode.type == FLOAT)
+                    code << "s.s " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
+
                 releaseIntTemp(exprCode.place);
                 itExpr++;
             }
@@ -325,7 +331,10 @@ string GlobalDeclaration::genCode(){
                 (*itExpr)->genCode(exprCode);
                 code << exprCode.code;
                 if(!declaration->declarator->isArray){
-                    code << "sw "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
+                    if(exprCode.type == INT)
+                        code << "sw "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
+                    else if(exprCode.type == FLOAT)
+                        code << "s.s "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
                 }
                 releaseIntTemp(exprCode.place);
                 itExpr++;
@@ -388,6 +397,7 @@ void IntExpr::genCode(Code &code){
     stringstream ss;
     ss << "li " << temp <<", "<< this->value <<endl;
     code.code = ss.str();
+    code.type = INT;
 }
 
 Type FloatExpr::getType(){
@@ -398,8 +408,9 @@ void FloatExpr::genCode(Code &code){
     string floatTemp = getFloatTemp();
     code.place = floatTemp;
     stringstream ss;
-     ss << "li.s " << floatTemp <<", "<< this->value <<endl;
+    ss << "li.s " << floatTemp <<", "<< this->value <<endl;
     code.code = ss.str();
+    code.type = FLOAT;
 }
 
 #define IMPLEMENT_BINARY_GET_TYPE(name)\
@@ -414,14 +425,17 @@ Type name##Expr::getType(){\
     return resultType; \
 }\
 
-void toFloat(Code &code, Type type){
-    if(type == INT){
+void toFloat(Code &code){
+    if(code.type == INT){
         string floatTemp = getFloatTemp();
         stringstream ss;
         ss << code.code
         << "mtc1 "<< code.place << ", " << floatTemp <<endl
         << "cvt.s.w " << floatTemp<< ", " << floatTemp <<endl;
         releaseFloatTemp(code.place);
+        code.place = floatTemp;
+        code.type = FLOAT;
+        code.code =  ss.str();
     }
     else{
         /* nothing */
@@ -434,17 +448,21 @@ void name##Expr::genCode(Code &code){\
     stringstream ss;\
     this->expr1->genCode(leftCode);\
     this->expr2->genCode(rightCode);\
-    if(this->expr1->getType() == INT && this->expr2->getType() == INT){\
+    if(leftCode.type == INT && rightCode.type == INT){\
+        code.type = INT;\
         releaseIntTemp(leftCode.place);\
         releaseIntTemp(rightCode.place);\
         ss<< leftCode.code << endl\
         << rightCode.code <<endl\
         << intArithmetic(leftCode, rightCode, code, op)<< endl;\
     }else{\
-        toFloat(leftCode, this->expr1->getType());\
-        toFloat(rightCode, this->expr2->getType());\
+        code.type = FLOAT;\
+        toFloat(leftCode);\
+        toFloat(rightCode);\
         releaseIntTemp(leftCode.place);\
         releaseIntTemp(rightCode.place);\
+        releaseFloatTemp(leftCode.place);\
+        releaseFloatTemp(rightCode.place);\
         ss << leftCode.code << endl\
         << rightCode.code <<endl\
         << floatArithmetic(leftCode, rightCode, code, op)<<endl;\
@@ -470,22 +488,22 @@ string intArithmetic(Code &leftCode, Code &rightCode, Code &code, char op){
     code.place = getIntTemp();
     switch (op)
     {
-    case '+':
-        ss << "add "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-     case '-':
-        ss << "sub "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-    case '*':
-        ss << "mult "<< leftCode.place <<", "<< rightCode.place <<endl
-        << "mflo "<< code.place;
-        break;
-    case '/':
-        ss << "div "<< leftCode.place <<", "<< rightCode.place
-        << "mflo "<< code.place;
-        break;
-    default:
-        break;
+        case '+':
+            ss << "add "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        case '-':
+            ss << "sub "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        case '*':
+            ss << "mult "<< leftCode.place <<", "<< rightCode.place <<endl
+            << "mflo "<< code.place;
+            break;
+        case '/':
+            ss << "div "<< leftCode.place <<", "<< rightCode.place
+            << "mflo "<< code.place;
+            break;
+        default:
+            break;
     }
     return ss.str();
 }
@@ -495,20 +513,20 @@ string floatArithmetic(Code &leftCode, Code &rightCode, Code &code, char op){
     code.place = getFloatTemp();
     switch (op)
     {
-    case '+':
-        ss << "add.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-     case '-':
-        ss << "sub.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-    case '*':
-        ss << "mul.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-    case '/':
-        ss << "div.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
-        break;
-    default:
-        break;
+        case '+':
+            ss << "add.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        case '-':
+            ss << "sub.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        case '*':
+            ss << "mul.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        case '/':
+            ss << "div.s "<< code.place<<", "<< leftCode.place <<", "<< rightCode.place;
+            break;
+        default:
+            break;
     }
     return ss.str();
 }
@@ -572,7 +590,30 @@ Type IdExpr::getType(){
 }
 
 void IdExpr::genCode(Code &code){
-    
+    if(codeGenerationVars.find(this->id) == codeGenerationVars.end()){
+        code.type = globalVariables[this->id];
+        if(globalVariables[this->id] == INT){
+            string intTemp = getIntTemp();
+            code.place = intTemp;
+            code.code = "lw "+ intTemp + ", "+ this->id + "\n";
+        }else if(globalVariables[this->id] == FLOAT){
+            string floatTemp = getFloatTemp();
+            code.place = floatTemp;
+            code.code = "l.s "+ floatTemp + ", "+ this->id + "\n";
+        }
+    }
+   else{
+        code.type = codeGenerationVars[this->id]->type;
+        if(codeGenerationVars[this->id]->type == INT && !codeGenerationVars[this->id]->isArray){
+            string intTemp = getIntTemp();
+            code.place = intTemp;
+            code.code = "lw "+ intTemp + ", " + to_string(codeGenerationVars[this->id]->offset) +"($sp)\n";
+        }else if(codeGenerationVars[this->id]->type == FLOAT && !codeGenerationVars[this->id]->isArray){
+            string floatTemp = getFloatTemp();
+            code.place = floatTemp;
+            code.code = "l.s "+ floatTemp + ", " +to_string(codeGenerationVars[this->id]->offset) +"($sp)\n";
+        }
+    }
 }
 
 Type MethodInvocationExpr::getType(){
@@ -759,7 +800,20 @@ int PrintStatement::evaluateSemantic(){
 }
 
 string PrintStatement::genCode(){
-    return "";
+    Code exprCode;
+    this->expr->genCode(exprCode);
+    stringstream code;
+    code<< exprCode.code<<endl;
+    if(exprCode.type == INT){
+        code <<"move $a0, "<< exprCode.place<<endl
+        << "li $v0, 1"<<endl
+        << "syscall"<<endl;
+    }else if(exprCode.type == FLOAT){
+        code << "mov.s $f12, "<< exprCode.place<<endl
+        << "li $v0, 2"<<endl
+        << "syscall"<<endl;
+    }
+    return code.str();
 }
 
 void EqExpr::genCode(Code &code){

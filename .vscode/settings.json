@@ -6,6 +6,7 @@
         "__mutex_base": "cpp",
         "memory": "cpp",
         "semaphore": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "sstream": "cpp"
     }
 }

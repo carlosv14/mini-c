@@ -2,21 +2,31 @@
 
 .globl main
 .text
+main:
 li $t0, 8
 
 sw $t0, 0($sp)
 
-li $t0, 0
+li.s $f0, 5.6
 
-sw $t0, 4($sp)
+s.s $f0, 4($sp)
 
-while0: 
+lw $t0, 0($sp)
+mtc1 $t0, $f2
+cvt.s.w $f2, $f2
 
-beqz , endWhile1
+l.s $f1, 4($sp)
 
+add.s $f1, $f2, $f1
 
+s.s $f1, 8($sp)
 
-j while0
-endWhile1: 
+l.s $f2, 8($sp)
+
+mov.s $f12, $f2
+li $v0, 2
+syscall
+li $v0, 10
+syscall
 
 
