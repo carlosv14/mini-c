@@ -1,6 +1,9 @@
 void main(){
-    int size = 8;
-    float value = 5.6;
-    float result = size + value;
-    printf(result);
+    int size = 8;//0
+    float value = 5.6;//4
+    float result = size + value; //8
+    if(result < 50)
+        printf(result);
+    else
+        printf("NOOOO!");
 }

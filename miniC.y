@@ -218,7 +218,15 @@ primary_expression: '(' expression ')' {$$ = $2;}
     | TK_LIT_STRING { $$ = new StringExpr($1, yylineno); }
     ;
 
-assignment_expression: unary_expression assignment_operator assignment_expression
+assignment_expression: unary_expression assignment_operator assignment_expression {
+        if($2 == EQUAL){
+            $$ = new AssignExpr($1,$3,yylineno);
+        }else if($2 == PLUSEQUAL){
+            $$ = new PlusAssignExpr($1,$3,yylineno);
+        }else if($2 == MINUSEQUAL){
+            $$ = new MinusAssignExpr($1,$3,yylineno);
+        }
+}
                      | logical_or_expression { $$ = $1; }
                      ;
 
