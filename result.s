@@ -2,55 +2,56 @@
 
 .globl main
 .text
-li.s $f0, 1.6
-
-s.s $f0, 0($sp)
-li.s $f0, 4.78
-
-s.s $f0, 4($sp)
-li.s $f0, 6.9
-
-s.s $f0, 8($sp)
-li.s $f0, 7.9
-
-s.s $f0, 12($sp)
-li.s $f0, 8.7
-
-s.s $f0, 16($sp)
-
+main: 
 li $t0, 5
 
-sw $t0, 20($sp)
+sw $t0, 0($sp)
 
 li $t0, 0
 
-sw $t0, 24($sp)
+sw $t0, 4($sp)
+
+
+li.s $f0, 3.5
+
+s.s $f0, 
+
+li.s $f0, 4.5
+
+s.s $f0, 
+
+li.s $f0, 5.5
+
+s.s $f0, 
 
 while0: 
-lw $t0, 24($sp)
+lw $t0, 4($sp)
 
-lw $t1, 20($sp)
+lw $t1, 0($sp)
 
 slt $t0, $t0, $t1
 
 beqz $t0, endWhile1
-lw $t1, 24($sp)
+lw $t1, 4($sp)
 
 li $a0, 4
 mult $a0, $t1
 mflo $t2
-la $t30($sp)
+la $t3, 8($sp)
 add $t2, $t3, $t2
 l.s $f0, 0($t2)
 
+mov.s $f12, $f0
+li $v0, 2
+syscall
 
-lw $t4, 24($sp)
+lw $t4, 4($sp)
 
 li $t5, 1
 
 add $t4, $t4, $t5
 
-sw $t4, 24($sp)
+sw $t4, 4($sp)
 
 
 j while0

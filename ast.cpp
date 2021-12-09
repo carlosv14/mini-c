@@ -615,10 +615,10 @@ void ArrayExpr::genCode(Code &code){
     {
         string temp = getIntTemp();
         string labelAddress = getIntTemp();
-        ss << arrayCode.code
-        << "li $a0, 4"
-        << "mult $a0, "<< arrayCode.place
-        <<"mflo "<<temp
+        ss << arrayCode.code<<endl
+        << "li $a0, 4"<<endl
+        << "mult $a0, "<< arrayCode.place<<endl
+        <<"mflo "<<temp<<endl
         << "la "<< labelAddress<<", "<< name<<endl
         << "add "<<temp<<", "<<labelAddress<<", "<<temp<<endl;
         releaseRegister(arrayCode.place);
@@ -635,18 +635,20 @@ void ArrayExpr::genCode(Code &code){
         string temp = getIntTemp();
         string address = getIntTemp();
         ss << arrayCode.code<<endl
-        << "li $a0, 4"
-        << "mult $a0, "<< arrayCode.place
-        <<"mflo "<<temp
-        << "la "<<address<<codeGenerationVars[name]->offset<<"($sp)"<<endl
+        << "li $a0, 4"<<endl
+        << "mult $a0, "<< arrayCode.place<<endl
+        <<"mflo "<<temp<<endl
+        << "la "<<address<<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl
         << "add "<<temp<<", "<<address<<", "<<temp<<endl;
         if(codeGenerationVars[name]->type == INT_ARRAY){
            ss <<"lw "<< temp<<", 0("<<temp<<")"<<endl;
            code.place = temp;
+           code.type = INT;
         }else{
             string floatTemp = getFloatTemp();
             ss <<"l.s "<< floatTemp<<", 0("<<temp<<")"<<endl;
            code.place = floatTemp;
+           code.type = FLOAT;
         }
     }
     code.code = ss.str();
