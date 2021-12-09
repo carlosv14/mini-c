@@ -8,6 +8,7 @@
         "semaphore": "cpp",
         "stop_token": "cpp",
         "sstream": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "iostream": "cpp"
     }
 }

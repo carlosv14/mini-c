@@ -292,22 +292,36 @@ string Declaration::genCode(){
         {
            codeGenerationVars[declaration->declarator->id] = new VariableInfo(globalStackPointer, false, false, this->type);
            globalStackPointer +=4;
+        }else{
+            codeGenerationVars[declaration->declarator->id] = new VariableInfo(globalStackPointer, true, false, this->type);
+            if(declaration->initializer == NULL){
+                if(declaration->declarator->arrayDeclaration != NULL){
+                    int size = ((IntExpr *)declaration->declarator->arrayDeclaration)->value;
+                    globalStackPointer += (size * 4);
+                }
+            }
         }
 
+        //int arr[] = {1,3,4,5}
         if(declaration->initializer != NULL){
             list<Expr *>::iterator itExpr = declaration->initializer->expressions.begin();
+            int offset = codeGenerationVars[declaration->declarator->id]->offset;
             for (int i = 0; i < declaration->initializer->expressions.size(); i++)
             {
                 Code exprCode;
                 (*itExpr)->genCode(exprCode);
                 code << exprCode.code <<endl;
                 if(exprCode.type == INT)
-                    code << "sw " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
+                    code << "sw " << exprCode.place <<", "<< offset << "($sp)"<<endl;
                 else if(exprCode.type == FLOAT)
-                    code << "s.s " << exprCode.place <<", "<< codeGenerationVars[declaration->declarator->id]->offset<< "($sp)"<<endl;
-
+                    code << "s.s " << exprCode.place <<", "<< offset << "($sp)"<<endl;
                 releaseRegister(exprCode.place);
                 itExpr++;
+                if (declaration->declarator->isArray)
+                {
+                    globalStackPointer+=4;
+                    offset += 4;
+                }
             }
             
         }
@@ -328,7 +342,7 @@ string GlobalDeclaration::genCode(){
     while (it != this->declaration->declarations.end())
     {
         InitDeclarator * declaration = (*it);
-        data << declaration->declarator->id <<": .word 0"<<endl;
+        data << declaration->declarator->id <<": .word 0";
         if(declaration->initializer != NULL){
             list<Expr *>::iterator itExpr = declaration->initializer->expressions.begin();
             for(int i = 0; i < declaration->initializer->expressions.size(); i++){
@@ -340,12 +354,30 @@ string GlobalDeclaration::genCode(){
                         code << "sw "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
                     else if(exprCode.type == FLOAT)
                         code << "s.s "<< exprCode.place<< ", " << declaration->declarator->id<<endl;
+                }else{
+                    string temp = getIntTemp();
+                    code << "la "<<temp<<", "<<declaration->declarator->id<<endl;
+                    if(exprCode.type == INT)
+                    {
+                        code <<"sw "<<exprCode.place<<", "<< i*4<<"("<<temp<<")"<<endl;
+                    }else if(exprCode.type == FLOAT)
+                    {
+                        code <<"s.s "<<exprCode.place<<", "<< i*4<<"("<<temp<<")"<<endl;
+                    }
                 }
                 releaseRegister(exprCode.place);
                 itExpr++;
             }
+        }else if(declaration->declarator->isArray){
+            if(declaration->declarator->arrayDeclaration != NULL){
+                int size = ((IntExpr*)declaration->declarator->arrayDeclaration)->value;
+                for (int i = 0; i < size - 1; i++)
+                {
+                    data<<", 0";
+                }
+            }
         }
-
+        data<<endl;
         it++;
     }
 
@@ -574,7 +606,50 @@ Type ArrayExpr::getType(){
 }
 
 void ArrayExpr::genCode(Code &code){
-    
+    Code arrayCode;
+    string name = this->id->id;
+    stringstream ss;
+    this->expr->genCode(arrayCode);
+    //a[1]
+    if (codeGenerationVars.find(name) == codeGenerationVars.end())
+    {
+        string temp = getIntTemp();
+        string labelAddress = getIntTemp();
+        ss << arrayCode.code
+        << "li $a0, 4"
+        << "mult $a0, "<< arrayCode.place
+        <<"mflo "<<temp
+        << "la "<< labelAddress<<", "<< name<<endl
+        << "add "<<temp<<", "<<labelAddress<<", "<<temp<<endl;
+        releaseRegister(arrayCode.place);
+        releaseRegister(labelAddress);
+        if(globalVariables[name] == INT_ARRAY){
+           ss <<"lw "<< temp<<", 0("<<temp<<")"<<endl;
+           code.place = temp;
+        }else{
+            string floatTemp = getFloatTemp();
+            ss <<"l.s "<< floatTemp<<", 0("<<temp<<")"<<endl;
+           code.place = floatTemp;
+        }
+    }else{
+        string temp = getIntTemp();
+        string address = getIntTemp();
+        ss << arrayCode.code<<endl
+        << "li $a0, 4"
+        << "mult $a0, "<< arrayCode.place
+        <<"mflo "<<temp
+        << "la "<<address<<codeGenerationVars[name]->offset<<"($sp)"<<endl
+        << "add "<<temp<<", "<<address<<", "<<temp<<endl;
+        if(codeGenerationVars[name]->type == INT_ARRAY){
+           ss <<"lw "<< temp<<", 0("<<temp<<")"<<endl;
+           code.place = temp;
+        }else{
+            string floatTemp = getFloatTemp();
+            ss <<"l.s "<< floatTemp<<", 0("<<temp<<")"<<endl;
+           code.place = floatTemp;
+        }
+    }
+    code.code = ss.str();
 }
 
 Type IdExpr::getType(){
@@ -671,11 +746,24 @@ void MethodInvocationExpr::genCode(Code &code){
         releaseRegister((*placesIt).place);
         if((*placesIt).type == INT)
             ss << "move $a"<<i<<", "<< (*placesIt).place<<endl;
+        else if((*placesIt).type == FLOAT)
+            ss << "mfc1 $a"<<i<<", "<< (*placesIt).place<<endl;
         i++;
         placesIt++;
     }
 
-    ss<< "jal "<< this->id<<endl;    
+    ss<< "jal "<< this->id->id<<endl;
+    string reg;
+    if(methods[this->id->id]->returnType == INT){
+        reg = getIntTemp();
+        ss << "move "<< reg<<", $v0";
+    }
+    else if(methods[this->id->id]->returnType == FLOAT){
+        reg = getFloatTemp();
+        ss << "mfc1 $v0, "<< reg<<endl;
+    }
+    code.code = ss.str();
+    code.place = reg;
 }
 
 Type PostIncrementExpr::getType(){

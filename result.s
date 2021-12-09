@@ -1,50 +1,59 @@
 .data
-string4: .asciiz"NOOOO!"
 
 .globl main
 .text
-    main:
-    li $t0, 8
+li.s $f0, 1.6
 
-    sw $t0, 0($sp)
+s.s $f0, 0($sp)
+li.s $f0, 4.78
 
-    li.s $f0, 5.6
+s.s $f0, 4($sp)
+li.s $f0, 6.9
 
-    s.s $f0, 4($sp)
+s.s $f0, 8($sp)
+li.s $f0, 7.9
 
-    lw $t0, 0($sp)
-    mtc1 $t0, $f1
-    cvt.s.w $f1, $f1
+s.s $f0, 12($sp)
+li.s $f0, 8.7
 
-    l.s $f0, 4($sp)
+s.s $f0, 16($sp)
 
-    add.s $f0, $f1, $f0
+li $t0, 5
 
-    s.s $f0, 8($sp)
+sw $t0, 20($sp)
 
-    l.s $f0, 8($sp)
+li $t0, 0
 
-    li $t0, 50
-    mtc1 $t0, $f1
-    cvt.s.w $f1, $f1
+sw $t0, 24($sp)
 
-    c.lt.s $f0, $f1
+while0: 
+lw $t0, 24($sp)
 
-    bc1f else0
-    l.s $f0, 8($sp)
+lw $t1, 20($sp)
 
-    mov.s $f12, $f0
-    li $v0, 2
-    syscall
+slt $t0, $t0, $t1
 
-    j endif1
-    else0: 
+beqz $t0, endWhile1
+lw $t1, 24($sp)
 
-    la $a0, string4
-    li $v0, 4
-    syscall
+li $a0, 4
+mult $a0, $t1
+mflo $t2
+la $t30($sp)
+add $t2, $t3, $t2
+l.s $f0, 0($t2)
 
-    endif1 :
-    li $v0, 10
-    syscall
+
+lw $t4, 24($sp)
+
+li $t5, 1
+
+add $t4, $t4, $t5
+
+sw $t4, 24($sp)
+
+
+j while0
+endWhile1: 
+
 
