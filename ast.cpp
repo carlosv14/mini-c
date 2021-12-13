@@ -87,6 +87,7 @@ const char * floatTemps[] = {"$f0",
 set<string> intTempMap;
 set<string> floatTempMap;
 
+
 string getIntTemp(){
     for (int i = 0; i < INT_TEMP_COUNT; i++)
     {
@@ -95,6 +96,8 @@ string getIntTemp(){
             return string(intTemps[i]);
         }
     }
+    cout<<"No more int registers!"<<endl;
+    //exit(1);
     return "";
 }
 
@@ -106,6 +109,8 @@ string getFloatTemp(){
             return string(floatTemps[i]);
         }
     }
+    cout<<"No more float registers!"<<endl;
+    //exit(1);
     return "";
 }
 
@@ -120,6 +125,26 @@ void releaseFloatTemp(string temp){
 void releaseRegister(string temp){
     releaseIntTemp(temp);
     releaseFloatTemp(temp);
+}
+
+string saveState(){
+    set<string>::iterator it = floatTempMap.begin();
+    stringstream ss;
+    ss<<"sw $ra, " <<globalStackPointer<< "($sp)\n";
+    globalStackPointer+=4;
+    return ss.str();
+}
+
+string retrieveState(string state){
+    std::string::size_type n = 0;
+    string s = "sw";
+    while ( ( n = state.find( s, n ) ) != std::string::npos )
+    {
+    state.replace( n, s.size(), "lw" );
+    n += 2;
+    globalStackPointer-=4;
+    }
+    return state;
 }
 
 string getTypeName(Type type){
@@ -416,12 +441,40 @@ int MethodDefinition::evaluateSemantic(){
     }
     
     popContext();
-
     return 0;
 }
 
 string MethodDefinition::genCode(){
-    return this->statement->genCode();
+    if(this->statement == NULL)
+        return "";
+
+    int stackPointer = 4;
+    globalStackPointer = 0;
+    stringstream code;
+    code << this->id<<": "<<endl;
+    string state = saveState();
+    code <<state<<endl;
+    if(this->params.size() > 0){
+        list<Parameter *>::iterator it = this->params.begin();
+        for(int i = 0; i< this->params.size(); i++){
+            code << "sw $a"<<i<<", "<< stackPointer<<"($sp)"<<endl;
+            codeGenerationVars[(*it)->declarator->id] = new VariableInfo(stackPointer, false, true, (*it)->type);
+            stackPointer +=4;
+            globalStackPointer +=4;
+            it++;
+        }
+    }
+    code<< this->statement->genCode()<<endl;
+    stringstream sp;
+    int currentStackPointer = globalStackPointer;
+    sp << endl<<"addiu $sp, $sp, -"<<currentStackPointer<<endl;
+    code << retrieveState(state);
+    code << "addiu $sp, $sp, "<<currentStackPointer<<endl;
+    code <<"jr $ra"<<endl;
+    codeGenerationVars.clear();
+    string result = code.str();
+    result.insert(id.size() + 2, sp.str());
+    return result;
 }
 
 Type IntExpr::getType(){
@@ -534,7 +587,7 @@ string intArithmetic(Code &leftCode, Code &rightCode, Code &code, char op){
             << "mflo "<< code.place;
             break;
         case '/':
-            ss << "div "<< leftCode.place <<", "<< rightCode.place
+            ss << "div "<< leftCode.place <<", "<< rightCode.place<<endl
             << "mflo "<< code.place;
             break;
         default:
@@ -611,6 +664,7 @@ void ArrayExpr::genCode(Code &code){
     stringstream ss;
     this->expr->genCode(arrayCode);
     //a[1]
+    releaseRegister(arrayCode.place);
     if (codeGenerationVars.find(name) == codeGenerationVars.end())
     {
         string temp = getIntTemp();
@@ -621,15 +675,14 @@ void ArrayExpr::genCode(Code &code){
         <<"mflo "<<temp<<endl
         << "la "<< labelAddress<<", "<< name<<endl
         << "add "<<temp<<", "<<labelAddress<<", "<<temp<<endl;
-        releaseRegister(arrayCode.place);
         releaseRegister(labelAddress);
-        if(globalVariables[name] == INT_ARRAY){
+        if(globalVariables[name] == INT){
            ss <<"lw "<< temp<<", 0("<<temp<<")"<<endl;
            code.place = temp;
         }else{
             string floatTemp = getFloatTemp();
             ss <<"l.s "<< floatTemp<<", 0("<<temp<<")"<<endl;
-           code.place = floatTemp;
+            code.place = floatTemp;
         }
     }else{
         string temp = getIntTemp();
@@ -637,10 +690,14 @@ void ArrayExpr::genCode(Code &code){
         ss << arrayCode.code<<endl
         << "li $a0, 4"<<endl
         << "mult $a0, "<< arrayCode.place<<endl
-        <<"mflo "<<temp<<endl
-        << "la "<<address<<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl
-        << "add "<<temp<<", "<<address<<", "<<temp<<endl;
-        if(codeGenerationVars[name]->type == INT_ARRAY){
+        <<"mflo "<<temp<<endl;
+        if(!codeGenerationVars[name]->isParameter)
+            ss<< "la " + address +", " <<codeGenerationVars[name]->offset<<"($sp)\n";
+        else
+            ss << "lw "<<address<<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+        ss<< "add "<<temp<<", "<<address<<", "<<temp<<endl;
+        releaseRegister(address);
+        if(codeGenerationVars[name]->type == INT){
            ss <<"lw "<< temp<<", 0("<<temp<<")"<<endl;
            code.place = temp;
            code.type = INT;
@@ -672,26 +729,35 @@ Type IdExpr::getType(){
 void IdExpr::genCode(Code &code){
     if(codeGenerationVars.find(this->id) == codeGenerationVars.end()){
         code.type = globalVariables[this->id];
-        if(globalVariables[this->id] == INT){
+        if(globalVariables[this->id] == INT_ARRAY || globalVariables[this->id] == FLOAT_ARRAY){
             string intTemp = getIntTemp();
+            code.code = "la " + intTemp+ ", "+ this->id + "\n";
             code.place = intTemp;
-            code.code = "lw "+ intTemp + ", "+ this->id + "\n";
-        }else if(globalVariables[this->id] == FLOAT){
+        }
+        if(globalVariables[this->id] == FLOAT){
             string floatTemp = getFloatTemp();
             code.place = floatTemp;
             code.code = "l.s "+ floatTemp + ", "+ this->id + "\n";
+        }else{
+            string intTemp = getIntTemp();
+            code.place = intTemp;
+            code.code = "lw "+ intTemp + ", "+ this->id + "\n";
         }
     }
    else{
         code.type = codeGenerationVars[this->id]->type;
-        if(codeGenerationVars[this->id]->type == INT && !codeGenerationVars[this->id]->isArray){
-            string intTemp = getIntTemp();
-            code.place = intTemp;
-            code.code = "lw "+ intTemp + ", " + to_string(codeGenerationVars[this->id]->offset) +"($sp)\n";
-        }else if(codeGenerationVars[this->id]->type == FLOAT && !codeGenerationVars[this->id]->isArray){
+        if(codeGenerationVars[this->id]->type == FLOAT && !codeGenerationVars[this->id]->isArray){
             string floatTemp = getFloatTemp();
             code.place = floatTemp;
             code.code = "l.s "+ floatTemp + ", " +to_string(codeGenerationVars[this->id]->offset) +"($sp)\n";
+        }else if(codeGenerationVars[this->id]->type == INT && !codeGenerationVars[this->id]->isArray){
+            string intTemp = getIntTemp();
+            code.place = intTemp;
+            code.code = "lw "+ intTemp + ", " + to_string(codeGenerationVars[this->id]->offset) +"($sp)\n";
+        }else if(codeGenerationVars[this->id]->isArray){
+            string intTemp = getIntTemp();
+            code.code = "la "+ intTemp + ", " + to_string(codeGenerationVars[this->id]->offset)+"($sp)\n";
+            code.place = intTemp;
         }
     }
 }
@@ -746,26 +812,27 @@ void MethodInvocationExpr::genCode(Code &code){
     while (placesIt != codes.end())
     {
         releaseRegister((*placesIt).place);
-        if((*placesIt).type == INT)
-            ss << "move $a"<<i<<", "<< (*placesIt).place<<endl;
-        else if((*placesIt).type == FLOAT)
+        if((*placesIt).type == FLOAT){
             ss << "mfc1 $a"<<i<<", "<< (*placesIt).place<<endl;
+        }else{
+            ss << "move $a"<<i<<", "<< (*placesIt).place<<endl;
+        }
         i++;
         placesIt++;
     }
 
     ss<< "jal "<< this->id->id<<endl;
     string reg;
-    if(methods[this->id->id]->returnType == INT){
+    if(methods[this->id->id]->returnType == FLOAT){
+        reg = getFloatTemp();
+        ss << "mtc1 $v0, "<< reg<<endl;
+    }else{
         reg = getIntTemp();
         ss << "move "<< reg<<", $v0";
     }
-    else if(methods[this->id->id]->returnType == FLOAT){
-        reg = getFloatTemp();
-        ss << "mfc1 $v0, "<< reg<<endl;
-    }
     code.code = ss.str();
     code.place = reg;
+    code.type = methods[this->id->id]->returnType;
 }
 
 Type PostIncrementExpr::getType(){
@@ -818,6 +885,7 @@ string WhileStatement::genCode(){
     string endWhileLabel = getNewLabel("endWhile");
     Code code;
     this->expr->genCode(code);
+    releaseRegister(code.place);
     ss << whileLabel << ": "<< endl
     << code.code <<endl;
     if(code.type == INT){
@@ -903,6 +971,7 @@ int ExprStatement::evaluateSemantic(){
 string ExprStatement::genCode(){
     Code exprCode;
     this->expr->genCode(exprCode);
+    releaseRegister(exprCode.place);
     return exprCode.code;
 }
 
@@ -913,15 +982,13 @@ int ReturnStatement::evaluateSemantic(){
 string ReturnStatement::genCode(){
     Code exprCode;
     this->expr->genCode(exprCode);
-    if(this->expr->getType() == INT){
-        releaseRegister(exprCode.place);
-    }else{
-        releaseRegister(exprCode.place);
-    }
-
+    releaseRegister(exprCode.place);
     stringstream ss;
-    ss << exprCode.code << endl
-    << "move $v0, "<< exprCode.place <<endl;
+    ss << exprCode.code << endl;
+    if(exprCode.type == INT)
+        ss<< "move $v0, "<< exprCode.place <<endl;
+    else
+        ss<< "mfc1 $v0, "<<exprCode.place<<endl;
     return ss.str();
 }
 
@@ -932,6 +999,7 @@ int PrintStatement::evaluateSemantic(){
 string PrintStatement::genCode(){
     Code exprCode;
     this->expr->genCode(exprCode);
+    releaseRegister(exprCode.place);
     stringstream code;
     code<< exprCode.code<<endl;
     if(exprCode.type == INT){
@@ -1096,18 +1164,56 @@ void AssignExpr::genCode(Code &code){
     this->expr2->genCode(rightSideCode);
     ss<< rightSideCode.code <<endl;
     string name = ((IdExpr *)this->expr1)->id;
-    if(codeGenerationVars.find(name) == codeGenerationVars.end()){
+    if(name != ""){
+        if(codeGenerationVars.find(name) == codeGenerationVars.end()){
         if(rightSideCode.type == INT)
             ss << "sw "<<rightSideCode.place << ", "<<name <<endl;
         else if(rightSideCode.type == FLOAT)
-             ss << "s.s "<<rightSideCode.place << ", "<<name <<endl;
+            ss << "s.s "<<rightSideCode.place << ", "<<name <<endl;
+        }else{
+            if(rightSideCode.type == INT)
+                ss<< "sw "<< rightSideCode.place <<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+            else if(rightSideCode.type == FLOAT)
+                ss<< "s.s "<< rightSideCode.place <<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+        }
+        releaseRegister(rightSideCode.place);
     }else{
-        if(rightSideCode.type == INT)
-            ss<< "sw "<< rightSideCode.place <<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
-        else if(rightSideCode.type == FLOAT)
-            ss<< "s.s "<< rightSideCode.place <<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+        Code arrayExpr;
+        string name = ((ArrayExpr *)this->expr1)->id->id;
+        ((ArrayExpr *)this->expr1)->expr->genCode(arrayExpr);
+        releaseRegister(arrayExpr.place);
+        ss << arrayExpr.code<<endl;
+        string temp = getIntTemp();
+        string address = getIntTemp();
+        if(codeGenerationVars.find(name) == codeGenerationVars.end()){
+            ss<< "li $a0, 4"<<endl
+            << "mult $a0, "<< arrayExpr.place<<endl
+            <<"mflo "<<temp<<endl
+            << "la " <<address<< ", "<< name<<endl
+            <<"add "<< temp << ", "<< temp << ", "<< address<<endl;
+            Code rightSideCode;
+            this->expr2->genCode(rightSideCode);
+            ss<< rightSideCode.code <<endl
+            << "sw "<< rightSideCode.place << ", 0(" <<temp<< ")"<<endl;
+        }else{
+            ss << "li $a0, 4"<<endl
+            << "mult $a0, "<< arrayExpr.place<<endl
+            <<"mflo "<<temp<<endl;
+            if(!codeGenerationVars[name]->isParameter)
+                ss<< "la " + address +", " <<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+            else
+                ss << "lw "<<address<<", "<<codeGenerationVars[name]->offset<<"($sp)"<<endl;
+            ss <<"add "<< temp << ", "<< temp << ", "<< address<<endl;
+            Code rightSideCode;
+            this->expr2->genCode(rightSideCode);
+            ss<< rightSideCode.code <<endl;
+            ss<< "sw "<< rightSideCode.place << ", 0("<<temp<<")"<<endl;
+        }    
+        releaseRegister(temp);     
+        releaseRegister(address);     
+        releaseRegister(rightSideCode.place);
+        releaseRegister(arrayExpr.place);
     }
-    releaseRegister(rightSideCode.place);
     code.code = ss.str();
 }
 

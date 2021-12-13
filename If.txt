@@ -1,0 +1,19 @@
+void main() {
+    float x, y;
+
+    x = 150.56;
+    y = 10.25;
+
+    printf("X= ");
+    printf(x);
+    printf("\n");
+    printf("Y= ");
+    printf(y);
+    printf("\n");
+
+    if( x < y)
+        printf("x < y\n");
+    else
+        printf("x >= y\n");
+        
+}
